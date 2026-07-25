@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#1E3A9E">
 <title>Aish Financial Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -201,12 +201,39 @@ body{
 .setrow .sd{font-size:11.5px;color:var(--ink-3);margin-top:2px}
 .setrow .chev{margin-left:auto;color:var(--ink-3)}
 
-.toast{position:absolute;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 18px;border-radius:100px;font-size:12.5px;font-weight:600;opacity:0;transition:.3s;z-index:90;box-shadow:var(--shadow-lg);white-space:nowrap}
+/* in-app dialog (pengganti confirm bawaan, wajib untuk WebView Android) */
+.dlgscrim{position:absolute;inset:0;background:rgba(8,13,36,.55);opacity:0;pointer-events:none;transition:.22s;z-index:95;border-radius:42px}
+.dlgscrim.show{opacity:1;pointer-events:auto}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%) scale(.96);width:290px;background:var(--surface);border-radius:22px;padding:22px 20px 18px;z-index:100;box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:.22s cubic-bezier(.2,.8,.2,1);text-align:center}
+.dialog.show{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.dialog .dic{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;font-size:25px;margin:0 auto 12px;background:var(--brand-050)}
+.dialog .dic.danger{background:var(--expense-050)}
+.dialog .dtitle{font-family:'Sora',sans-serif;font-size:16.5px;font-weight:700;margin-bottom:6px}
+.dialog .dmsg{font-size:12.5px;color:var(--ink-2);line-height:1.55;margin-bottom:18px}
+.dialog .dbtns{display:flex;gap:9px}
+.dialog button{flex:1;border-radius:13px;padding:12px 8px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;border:1px solid var(--line)}
+.dialog .dcancel{background:#fff;color:var(--ink-2)}
+.dialog .dok{background:var(--brand);color:#fff;border-color:var(--brand)}
+.dialog .dok.danger{background:var(--expense);border-color:var(--expense)}
+.toast{position:absolute;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 18px;border-radius:100px;font-size:12.5px;font-weight:600;opacity:0;transition:.3s;z-index:110;box-shadow:var(--shadow-lg);max-width:80%;text-align:center;line-height:1.4}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .mini-note{font-size:11px;color:var(--ink-3);text-align:center;margin-top:10px;line-height:1.5}
 .legend-foot{color:#a7b6e0;font-size:11.5px;text-align:center;max-width:440px;line-height:1.6}
 .legend-foot b{color:#dbe4ff}
-@media (max-width:440px){body{padding:0;gap:0}.device{width:100vw;height:100vh;border-radius:0;padding:0}.screen{border-radius:0}.notch{display:none}.stage-head,.legend-foot{display:none}.scrim{border-radius:0}}
+/* tampilan di HP asli / setelah dipasang sebagai aplikasi */
+@media (max-width:440px){
+  body{padding:0;gap:0;display:block}
+  .device{width:100vw;height:100vh;height:100dvh;border-radius:0;padding:0;box-shadow:none}
+  .screen{border-radius:0}
+  .notch,.statusbar,.stage-head,.legend-foot{display:none}
+  .scrim,.dlgscrim{border-radius:0}
+  .viewport{padding-top:env(safe-area-inset-top,0px)}
+  .navbar{height:calc(84px + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px)}
+  .fab{bottom:calc(52px + env(safe-area-inset-bottom,0px))}
+  .toast{bottom:calc(100px + env(safe-area-inset-bottom,0px))}
+  .view{padding-bottom:calc(130px + env(safe-area-inset-bottom,0px))}
+  .sheet{padding-bottom:calc(26px + env(safe-area-inset-bottom,0px))}
+}
 </style>
 </head>
 <body>
@@ -424,6 +451,18 @@ body{
       <h4><span>Nama Kamu</span><span class="xbtn" onclick="closeSheet()">✕</span></h4>
       <div class="field"><label>Nama tampilan</label><input type="text" class="inp" id="pNm" placeholder="Nama kamu"></div>
       <button class="btn-primary" onclick="saveProfile()">Simpan</button>
+    </div>
+
+    <!-- dialog konfirmasi (bekerja di semua perangkat, termasuk aplikasi Android) -->
+    <div class="dlgscrim" id="dlgScrim" onclick="dlgAnswer(false)"></div>
+    <div class="dialog" id="dlg">
+      <div class="dic" id="dlgIcon">⚠️</div>
+      <div class="dtitle" id="dlgTitle">Konfirmasi</div>
+      <div class="dmsg" id="dlgMsg"></div>
+      <div class="dbtns">
+        <button class="dcancel" onclick="dlgAnswer(false)">Batal</button>
+        <button class="dok" id="dlgOk" onclick="dlgAnswer(true)">Ya, Lanjut</button>
+      </div>
     </div>
 
     <div class="toast" id="toast"></div>
@@ -689,20 +728,23 @@ function openWallet(editId){ walEditId=editId||null; document.getElementById('de
   document.getElementById('walletSheetTitle').textContent=editId?'Ubah Dompet':'Tambah Dompet';
   if(editId){ const w=walletById(editId); document.getElementById('wNm').value=w.nm; document.getElementById('wT').value=w.t||''; document.getElementById('wOpen').value=fmt(walletBalance(editId)); walEmoji=w.em; walColor=w.c; }
   else { document.getElementById('wNm').value=''; document.getElementById('wT').value=''; document.getElementById('wOpen').value='Rp 0'; walEmoji='🏦'; walColor='#2A4FC4'; }
-  document.getElementById('wEmoji').innerHTML=EMOJIS_W.map(e=>`<button class="${e===walEmoji?'on':''}" onclick="walEmoji='${e}';renderPick('wEmoji',EMOJIS_W,walEmoji)">${e}</button>`).join('');
-  document.getElementById('wColor').innerHTML=PALETTE.map(c=>`<div class="swatch ${c===walColor?'on':''}" style="background:${c}" onclick="walColor='${c}';renderPick('wColor',PALETTE,walColor,true)"></div>`).join('');
-  showSheet('walletSheet'); }
-function renderPick(id,arr,sel,isColor){ const el=document.getElementById(id);
-  el.innerHTML=isColor? arr.map(c=>`<div class="swatch ${c===sel?'on':''}" style="background:${c}" onclick="${id==='wColor'?"walColor":''}='${c}';renderPick('${id}',PALETTE,'${c}',true)"></div>`).join('')
-   : arr.map(e=>`<button class="${e===sel?'on':''}" onclick="walEmoji='${e}';renderPick('${id}',EMOJIS_W,'${e}')">${e}</button>`).join(''); }
+  drawWalletPickers(); showSheet('walletSheet'); }
+function drawWalletPickers(){
+  document.getElementById('wEmoji').innerHTML=EMOJIS_W.map(e=>`<button class="${e===walEmoji?'on':''}" onclick="pickWalEmoji('${e}')">${e}</button>`).join('');
+  document.getElementById('wColor').innerHTML=PALETTE.map(c=>`<div class="swatch ${c===walColor?'on':''}" style="background:${c}" onclick="pickWalColor('${c}')"></div>`).join(''); }
+function pickWalEmoji(e){ walEmoji=e; drawWalletPickers(); }
+function pickWalColor(c){ walColor=c; drawWalletPickers(); }
 function saveWallet(){ const nm=document.getElementById('wNm').value.trim(); if(!nm){toast('Isi nama dompet');return;}
   const bal=parseAmt('wOpen'); const t=document.getElementById('wT').value.trim();
   if(walEditId){ const w=walletById(walEditId); const delta=bal - walletBalance(walEditId); w.open+=delta; w.nm=nm; w.t=t; w.em=walEmoji; w.c=walColor; toast('Dompet diperbarui ✓'); }
   else { S.wallets.push({id:'w_'+uid(),nm,t,em:walEmoji,c:walColor,open:bal}); toast('Dompet ditambahkan ✓'); }
   save(); closeSheet(); renderAll(); }
-function deleteWallet(){ if(S.wallets.length<=1){toast('Minimal harus ada 1 dompet');return;}
-  const used=S.tx.some(t=>t.w===walEditId); if(used){ if(!confirm('Dompet ini punya transaksi. Hapus dompet beserta transaksinya?')) return; S.tx=S.tx.filter(t=>t.w!==walEditId); }
-  S.wallets=S.wallets.filter(w=>w.id!==walEditId); save(); closeSheet(); renderAll(); toast('Dompet dihapus'); }
+async function deleteWallet(){ if(S.wallets.length<=1){toast('Minimal harus ada 1 dompet');return;}
+  const id=walEditId; const used=S.tx.filter(t=>t.w===id).length;
+  const ok=await askConfirm('Hapus Dompet', used? `Dompet ini punya ${used} transaksi. Dompet beserta seluruh transaksinya akan dihapus.` : 'Dompet ini akan dihapus dari daftar.', 'Ya, Hapus', true, '🗑️');
+  if(!ok) return;
+  if(used) S.tx=S.tx.filter(t=>t.w!==id);
+  S.wallets=S.wallets.filter(w=>w.id!==id); save(); closeSheet(); renderAll(); toast('Dompet dihapus ✓'); }
 
 /* goal */
 let goalEditId=null, goalEmoji='🎯';
@@ -732,12 +774,65 @@ function saveBudget(){ if(!budCat){toast('Pilih kategori dulu');return;} const a
   S.budgets[budCat]=a; save(); closeSheet(); renderAll(); toast('Anggaran disimpan ✓'); }
 function deleteBudget(){ delete S.budgets[budCat]; save(); closeSheet(); renderAll(); toast('Anggaran dihapus'); }
 
+/* dialog konfirmasi in-app — pengganti confirm() bawaan.
+   Penting: di WebView Android, confirm() bawaan tidak muncul dan selalu
+   dianggap "Batal", sehingga tombol seperti "Hapus Semua Data" tidak berfungsi. */
+let dlgResolve=null;
+function askConfirm(title,msg,okLabel,danger,icon){
+  return new Promise(res=>{
+    dlgResolve=res;
+    document.getElementById('dlgTitle').textContent=title;
+    document.getElementById('dlgMsg').textContent=msg;
+    const ok=document.getElementById('dlgOk');
+    ok.textContent=okLabel||'Ya, Lanjut';
+    ok.className='dok'+(danger?' danger':'');
+    const ic=document.getElementById('dlgIcon');
+    ic.textContent=icon||(danger?'🗑️':'❓');
+    ic.className='dic'+(danger?' danger':'');
+    document.getElementById('dlgScrim').classList.add('show');
+    document.getElementById('dlg').classList.add('show');
+  });
+}
+function dlgAnswer(v){
+  document.getElementById('dlgScrim').classList.remove('show');
+  document.getElementById('dlg').classList.remove('show');
+  if(dlgResolve){ const r=dlgResolve; dlgResolve=null; r(v); }
+}
+
 /* profile + data */
 function openProfile(){ document.getElementById('pNm').value=S.profile.name||''; showSheet('profileSheet'); }
 function saveProfile(){ const n=document.getElementById('pNm').value.trim(); if(n) S.profile.name=n; save(); closeSheet(); renderAll(); toast('Nama disimpan ✓'); }
-function exportData(){ const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='aish-finance-backup.json'; a.click(); toast('Data diekspor ✓'); }
-function resetSample(){ if(confirm('Muat ulang data contoh? Data saat ini akan diganti.')){ seedSample(); renderAll(); go('home'); toast('Data contoh dimuat'); } }
-function clearAll(){ if(confirm('Hapus SEMUA data dan mulai dari kosong?')){ S={profile:{name:S.profile.name||'Kamu'},cats:JSON.parse(JSON.stringify(DEFAULT_CATS)),wallets:[{id:'w_'+uid(),nm:'Uang Tunai',t:'Dompet utama',em:'💵',c:'#2A4FC4',open:0}],budgets:{},goals:[],tx:[]}; save(); renderAll(); go('home'); toast('Semua data dihapus'); } }
+function exportData(){
+  const json=JSON.stringify(S,null,2);
+  const name='aish-finance-backup.json';
+  // Di aplikasi Android: simpan lewat jembatan native ke folder Download.
+  if(window.AishApp && window.AishApp.saveBackup){
+    let path='';
+    try{ path=window.AishApp.saveBackup(json,name); }catch(e){ path=''; }
+    toast(path? ('Backup tersimpan di '+path) : 'Gagal menyimpan backup');
+    return;
+  }
+  // Di browser: unduh sebagai file biasa.
+  try{
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    toast('Data diekspor ✓');
+  }catch(e){ toast('Gagal mengekspor data'); }
+}
+async function resetSample(){
+  const ok=await askConfirm('Muat Ulang Data Contoh','Data kamu saat ini akan diganti dengan data contoh. Lanjutkan?','Ya, Muat Ulang',false,'🔄');
+  if(!ok) return;
+  seedSample(); renderAll(); go('home'); toast('Data contoh dimuat ✓');
+}
+async function clearAll(){
+  const ok=await askConfirm('Hapus Semua Data','Seluruh transaksi, dompet, anggaran, dan target tabungan akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.','Ya, Hapus',true,'🗑️');
+  if(!ok) return;
+  S={profile:{name:S.profile.name||'Kamu'},cats:JSON.parse(JSON.stringify(DEFAULT_CATS)),wallets:[{id:'w_'+uid(),nm:'Uang Tunai',t:'Dompet utama',em:'💵',c:'#2A4FC4',open:0}],budgets:{},goals:[],tx:[]};
+  save(); renderAll(); go('home'); toast('Semua data dihapus ✓');
+}
 
 /* toast */
 let toastT; function toast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),1900); }
